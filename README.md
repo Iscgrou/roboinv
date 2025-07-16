@@ -1,6 +1,6 @@
 # Genkit
 
-<a href="https://idx.google.com/new?template=https%3A%2F%2Fgithub.com%2Fproject-idx%2Ftemplates%2Ftree%2Fmain%2Fgemini%2Fjs-web-genkit-langchain">
+# Proxy Panel Financial Management Bot
   <picture>
     <source
       media="(prefers-color-scheme: dark)"
