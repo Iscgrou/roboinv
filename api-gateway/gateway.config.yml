@@ -1,0 +1,18 @@
+# api-gateway/gateway.config.yml
+# ... (http, serviceEndpoints definitions)
+
+policies:
+  - jwt-auth # Register our custom policy
+  - proxy
+
+pipelines:
+  - name: authenticated-pipeline
+    policies:
+      - jwt-auth: # Apply the JWT policy first
+      - proxy: # Then proxy to the backend if JWT is valid
+          - action:
+              serviceEndpoint: representative-management-service
+              changeOrigin: true
+# ... (add other protected services to this pipeline or create new pipelines)
+
+# ... (rest of the file)

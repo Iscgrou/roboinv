@@ -1,55 +1,47 @@
+// notification-service/notificationService.js
 import axios from 'axios';
 
 class NotificationService {
   constructor() {
     this.botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!this.botToken) {
-      console.error('TELEGRAM_BOT_TOKEN environment variable not set.');
-      // Depending on requirements, you might throw an error or handle this differently
+      throw new Error('TELEGRAM_BOT_TOKEN must be provided in environment variables.');
     }
-    this.telegramApiUrl = `https://api.telegram.org/bot${this.botToken}`;
   }
 
   async sendTelegramMessage(chatId, messageText, options = {}) {
-    if (!this.botToken) {
-      console.error('Cannot send message: Telegram bot token is not configured.');
-      return; // Or throw an error
-    }
+    const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+    const payload = {
+      chat_id: chatId,
+      text: messageText,
+      ...options,
+    };
 
     try {
-      const url = `${this.telegramApiUrl}/sendMessage`;
-      const data = {
-        chat_id: chatId,
-        text: messageText,
-        ...options,
-      };
-      const response = await axios.post(url, data);
-      return response.data;
+      await axios.post(url, payload);
+      console.log(`Notification sent to chat ID: ${chatId}`);
     } catch (error) {
-      console.error(`Error sending message to chat ${chatId}:`, error.message);
-      // Further error handling or logging as needed
-      throw error; // Re-throw the error for calling service to handle
+      console.error(`Error sending notification to chat ID ${chatId}:`, error.response ? error.response.data : error.message);
+      // Depending on the error, we might want to retry or handle it specifically.
     }
   }
 
-  generatePaymentReminderMessage(representative) {
-    if (!representative || typeof representative.name !== 'string' || typeof representative.current_balance === 'undefined') {
-      console.error('Invalid representative data for reminder message.');
-      return 'Error generating reminder message.';
+  generatePaymentReminderMessage(representative, invoiceDetails) {
+    // invoiceDetails is an object like { oldest_due_date: 'YYYY-MM-DD' }
+    const formattedBalance = new Intl.NumberFormat('fa-IR').format(representative.current_balance);
+    let message = `یادآوری پرداخت برای نماینده: ${representative.name}
+`;
+    message += `مبلغ بدهی فعلی: ${formattedBalance} تومان
+`;
+    if (invoiceDetails && invoiceDetails.oldest_due_date) {
+      // Format the date for better readability if needed
+      message += `تاریخ سررسید نزدیک‌ترین فاکتور پرداخت نشده: ${invoiceDetails.oldest_due_date}`;
+    } else {
+      message += "لطفا در اسرع وقت نسبت به تسویه حساب اقدام فرمایید.";
     }
-
-    // Assuming representative object has 'name' and 'current_balance'
-    const message = `📢 یادآوری سررسید صورت حساب برای نماینده: ${representative.name}\n\n` +
-                    `مانده حساب فعلی شما: ${representative.current_balance.toFixed(2)} تومان.\n\n` +
-                    `سررسید پرداخت: [تاریخ سررسید جایگزین شود]\n\n` + // Placeholder for due date
-                    `لطفا جهت جلوگیری از قطع سرویس، نسبت به تسویه حساب اقدام نمایید.`;
-    // Example: const outstandingInvoices = await this.reportingService.getRepresentativeOutstandingInvoices(representative.id);
-    // Include invoice details in the message...
-
     return message;
   }
-
-  // Additional methods for generating other notification types will be added here
 }
 
-export default NotificationService;
+// Export a singleton instance
+export default new NotificationService();

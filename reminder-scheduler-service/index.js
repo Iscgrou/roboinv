@@ -1,122 +1,71 @@
--- Add last_reminder_sent_at column to representatives table
-ALTER TABLE representatives
-ADD COLUMN last_reminder_sent_at TIMESTAMP WITH TIME ZONE NULL;
-const schedule = require('node-schedule');
-const NotificationService = require('/app/notification-service/notificationService'); // Absolute path
-const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
-const axios = require('axios');
-// Or import DAOs directly if service isn't needed for this specific query
-// const RepresentativeDao = require('../representative-management-service/representativeDao');
+// reminder-scheduler-service/index.js
+import schedule from 'node-schedule';
+import NotificationService from '../notification-service/notificationService.js';
+// In a real scenario, this service would make an API call to the reporting/representative service.
+// For simplicity in this step, we'll assume direct DB access is encapsulated in a local DAO.
+import dbClient from '../shared/database'; // Assuming we create a shared DB client instance
 
-// Initialize services (assuming instances are created elsewhere or within this module)
-const notificationService = new NotificationService();
-const representativeManagementService = new RepresentativeManagementService();
-// Or initialize DAOs if used directly
+console.log('Reminder Scheduler Service started.');
 
-const REMINDER_SCHEDULE = '0 0 * * *'; // Run daily at midnight
+// Schedule the job to run once every day at 10:00 AM
+const rule = new schedule.RecurrenceRule();
+rule.hour = 10;
+rule.minute = 0;
+rule.tz = 'Asia/Tehran';
 
-async function findRepresentativesDueForReminder() {
-    try {
-        console.log('Checking for representatives due for reminders...');
+schedule.scheduleJob(rule, async () => {
+  console.log('Running daily reminder job...');
+  try {
+    // This query finds each representative with an outstanding balance and joins them
+    // with their oldest unpaid invoice to get its due date.
+    const query = `
+      WITH OldestUnpaidInvoice AS (
+        SELECT 
+          i.representative_id,
+          i.due_date,
+          ROW_NUMBER() OVER(PARTITION BY i.representative_id ORDER BY i.due_date ASC) as rn
+        FROM invoices i
+        WHERE i.outstanding_balance > 0
+      )
+      SELECT 
+        r.id,
+        r.name,
+        r.telegram_id,
+        r.current_balance,
+        oui.due_date as oldest_due_date
+      FROM representatives r
+      JOIN OldestUnpaidInvoice oui ON r.id = oui.representative_id
+      WHERE 
+        oui.rn = 1 AND
+        r.current_balance > 0 AND
+        (r.last_reminder_sent_at IS NULL OR r.last_reminder_sent_at < NOW() - INTERVAL '23 hours') AND
+        oui.due_date <= (NOW() + INTERVAL '1 day' * r.payment_reminder_threshold_days);
+    `;
 
-        // Implement the SQL query logic here. This assumes the Reporting Service exposes
-        // an endpoint to run custom queries or provides the necessary data.
-        // Alternatively, if direct database access is allowed for this service,
-        // you would use a database client here.
-        // For demonstration, let's assume we call a reporting endpoint that executes this query.
-        const query = `
-            SELECT
-                r.id,
-                r.name,
-                r.telegram_id,
-                r.current_balance,
-                MIN(i.due_date) FILTER (WHERE i.outstanding_balance > 0) AS oldest_outstanding_due_date
-            FROM
-                representatives r
-            JOIN
-                invoices i ON r.id = i.representative_id
-            WHERE
-                i.outstanding_balance > 0
-            GROUP BY
-                r.id, r.name, r.telegram_id, r.current_balance
-            HAVING
-                MIN(i.due_date - INTERVAL '1 day' * r.payment_reminder_threshold_days) <= CURRENT_DATE;
-        `;
+    const { rows: representativesToRemind } = await dbClient.query(query);
 
-        const response = await axios.post(`${API_GATEWAY_URL}/reports/query`, { query }); // Assuming a generic query endpoint
+    console.log(`Found ${representativesToRemind.length} representatives to remind.`);
 
-    } catch (error) {
-        console.error('Error finding representatives due for reminder:', error);
-        throw error; // Re-throw to be handled by the scheduler
+    for (const rep of representativesToRemind) {
+      const invoiceDetails = { oldest_due_date: rep.oldest_due_date };
+      const message = NotificationService.generatePaymentReminderMessage(rep, invoiceDetails);
+      
+      // We need the admin's chat ID to notify them.
+      // This is a conceptual issue - should we notify the rep or the admin?
+      // Assuming for now we notify an admin. This needs a mechanism to get admin chat IDs.
+      const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID; // Placeholder
+      if (ADMIN_CHAT_ID) {
+          await NotificationService.sendTelegramMessage(ADMIN_CHAT_ID, message);
+          
+          // After sending, update the timestamp to prevent spam
+          const updateQuery = 'UPDATE representatives SET last_reminder_sent_at = NOW() WHERE id = $1';
+          await dbClient.query(updateQuery, [rep.id]);
+          console.log(`Reminder sent for representative: ${rep.name} and timestamp updated.`);
+      } else {
+        console.warn('ADMIN_CHAT_ID not set. Cannot send reminder.');
+      }
     }
-}
-
-async function sendPaymentReminders() {
-    console.log('Running scheduled payment reminder job.');
-    try {
-        const representativesToRemind = await findRepresentativesDueForReminder();
-
-        if (representativesToRemind.length === 0) {
-            console.log('No representatives due for reminders.');
-            return;
-        }
-
-        console.log(`Found ${representativesToRemind.length} representatives to remind.`);
-
-        for (const representative of representativesToRemind) {
-            try {
-                // Need representative's telegram_id and current_balance (assuming these are in the returned data)
-                if (!representative.telegram_id || representative.current_balance <= 0) {
-                    console.warn(`Skipping reminder for representative ${representative.id}: Missing Telegram ID or no outstanding balance.`);
-                    continue;
-                }
-
-                // Fetch necessary data for reminder message (e.g., specific outstanding invoices)
-                // This might require additional service calls or data retrieval logic
-                // For now, using basic representative info.
-                // Assuming oldest_outstanding_due_date is available in representative object
-                const reminderMessage = notificationService.generatePaymentReminderMessage({
-                    name: representative.name,
-                    current_balance: representative.current_balance,
-                    // Include due date info if available
-                });
-
-                // Assuming administrator chat ID for sending reminders
-                // In a real scenario, you'd likely send to the representative themselves
-                // or specific administrators responsible for this representative.
-                // For this project, we are sending to administrators.
-                // Need to determine which administrator(s) should receive which reminders.
-                // For simplicity, let's assume a predefined admin chat ID for now.
-                const adminChatId = process.env.ADMIN_CHAT_ID; // Needs to be configured
-
-                if (!adminChatId) {
-                    console.error('ADMIN_CHAT_ID environment variable is not set. Cannot send reminders.');
-                    continue;
-                }
-
-                await notificationService.sendTelegramMessage(adminChatId, reminderMessage);
-                console.log(`Sent reminder to admin for representative ${representative.name}.`);
-
-            } catch (error) {
-                console.error(`Error sending reminder for representative ${representative.id}:`, error);
-                // Continue processing other representatives even if one fails
-            }
-        }
-        console.log('Payment reminder job finished.');
-
-    } catch (error) {
-        console.error('Fatal error during payment reminder job:', error);
-        // Consider sending a notification to a super-admin if a fatal error occurs
-    }
-}
-
-function startReminderScheduler() {
-    console.log(`Starting payment reminder scheduler with schedule: ${REMINDER_SCHEDULE}`);
-    schedule.scheduleJob(REMINDER_SCHEDULE, sendPaymentReminders);
-    console.log('Payment reminder scheduler started.');
-}
-
-// Export the start function
-module.exports = {
-    startReminderScheduler,
-};
+  } catch (error) {
+    console.error('Error running reminder job:', error);
+  }
+});

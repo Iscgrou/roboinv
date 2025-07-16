@@ -1,215 +1,72 @@
-import { RepresentativeDao } from '../representative-management-service/representativeDao.js';
-import { EventDao } from '../shared/eventDao.js';
+// representative-management-service/representativeService.js
+import RepresentativeDao from './representativeDao.js';
+import EventDao from '../shared/eventDao.js';
+import SnapshotDao from '../shared/snapshotDao.js';
+
+const SNAPSHOT_THRESHOLD = 50; // This should be in a config file
 
 class RepresentativeService {
-  constructor(representativeDao, eventDao) {
-    if (!(representativeDao instanceof RepresentativeDao)) {
-      throw new Error('representativeDao must be an instance of RepresentativeDao');
-    }
-    if (!(eventDao instanceof EventDao)) {
-      throw new Error('eventDao must be an instance of EventDao');
-    }
-    this.representativeDao = representativeDao;
-    this.eventDao = eventDao;
+  constructor(dbClient) {
+    // In a real microservice, you'd likely get these via dependency injection
+    this.representativeDao = new RepresentativeDao(dbClient);
+    this.eventDao = new EventDao(dbClient);
+    this.snapshotDao = new SnapshotDao(dbClient);
+    this.dbClient = dbClient; // for transactions
   }
 
-  async createRepresentative(data) {
-    // Basic validation (expand as needed)
-    if (!data || !data.name || !data.telegram_id) {
-      throw new Error('Invalid representative data');
+  // Reconstructs the state of a representative from snapshots and events
+  async getRepresentativeState(representativeId) {
+    let representative = {};
+    let lastVersion = 0;
+
+    const latestSnapshot = await this.snapshotDao.getLatestSnapshot(representativeId);
+    if (latestSnapshot) {
+      representative = latestSnapshot.state;
+      lastVersion = latestSnapshot.version;
     }
 
-    // Initial creation event
-    const eventData = {
- entity_type: 'representative',
-      entity_id: data.id, // Assuming ID is generated before creation or passed in data
- event_type: 'RepresentativeCreated',
-      event_data: { name: data.name, telegram_id: data.telegram_id, initial_balance: data.initial_balance || 0 },
-      timestamp: new Date(),
-      user_id: data.user_id // Assuming user_id is passed in data
-    };
+    const events = await this.eventDao.getEventsByEntityAfterVersion(representativeId, lastVersion);
 
-    // Save the event first
- await this.eventDao.appendEvent(eventData);
-
-    // Create the representative with initial state derived from the event
-    const representative = await this.representativeDao.createRepresentative({ ...data, current_balance: eventData.event_data.initial_balance });
-    //   timestamp: new Date(),
-    //   user_id: data.user_id // Assuming user_id is passed in data
-    // };
-    // await this.eventDao.appendEvent(eventData);
+    for (const event of events) {
+      representative = this.representativeDao.applyEvent(representative, event); // Assuming applyEvent is synchronous
+    }
+    
+    // The final state includes the latest version number from the last event applied
+    representative.version = events.length > 0 ? events[events.length - 1].version : lastVersion;
+    representative.id = representativeId; // Ensure ID is part of the state object
 
     return representative;
   }
 
-  async getRepresentative(id) {
-    if (!id) {
-      throw new Error('Representative ID is required');
-    }
-    // Retrieve the representative's current state by replaying events
-    return this.getRepresentativeState(id);
+  // Creates a new representative
+  async createRepresentative(data, adminUserId) {
+    // ... logic for creating a new representative and initial event
+    // would call saveAndApplyEvent
   }
 
-  async updateRepresentative(id, data) {
-    if (!id || !data) {
-      throw new Error('Representative ID and update data are required');
-    }
+  // Main method to handle state changes
+  async saveAndApplyEvent(eventData) {
+    const newEvent = await this.eventDao.appendEvent(eventData);
+    const currentState = await this.getRepresentativeState(newEvent.entity_id);
     
-    const currentRepresentativeState = await this.getRepresentativeState(id);
-    if (!currentRepresentativeState) {
-      throw new Error('Representative not found');
-    }
+    // Check if it's time to create a new snapshot
+    if (currentState.version > 0 && currentState.version % SNAPSHOT_THRESHOLD === 0) {
+      console.log(`Creating snapshot for entity ${currentState.id} at version ${currentState.version}`);
+      
+      // Remove the temporary version field from the state before saving snapshot
+      const stateToSave = { ...currentState };
+      delete stateToSave.version;
 
-    const eventsToAppend = [];
-
-    // Determine changes and create corresponding events
-    if (data.name !== undefined && data.name !== currentRepresentativeState.name) {
-      eventsToAppend.push({
-        entity_type: 'representative',
-        entity_id: id,
-        event_type: 'RepresentativeNameUpdated',
-        event_data: { old_name: currentRepresentativeState.name, new_name: data.name },
-        timestamp: new Date(),
-        user_id: data.user_id // Assuming user_id is passed in data
-      });
-    }
-
-    if (data.telegram_id !== undefined && data.telegram_id !== currentRepresentativeState.telegram_id) {
-      eventsToAppend.push({
-        entity_type: 'representative',
-        entity_id: id,
-        event_type: 'RepresentativeTelegramIdUpdated',
-        event_data: { old_telegram_id: currentRepresentativeState.telegram_id, new_telegram_id: data.telegram_id },
-        timestamp: new Date(),
-        user_id: data.user_id
-      });
-    }
-
-    if (data.payment_reminder_threshold_days !== undefined && data.payment_reminder_threshold_days !== currentRepresentativeState.payment_reminder_threshold_days) {
-       eventsToAppend.push({
-        entity_type: 'representative',
-        entity_id: id,
-        event_type: 'ReminderThresholdUpdated',
-        event_data: { old_threshold: currentRepresentativeState.payment_reminder_threshold_days, new_threshold: data.payment_reminder_threshold_days },
-        timestamp: new Date(),
-        user_id: data.user_id
-      });
-    }
-
-    // Note: Balance updates (InvoiceIssued, PaymentReceived, ManualAdjustment) should ideally be handled by dedicated event types triggered by other services (Invoice Generation, Payment Processing) or specific admin actions, not a generic 'balance_adjustment' in updateRepresentative. We'll assume those events are generated elsewhere and processed by applying them here.
-
-    for (const event of eventsToAppend) {
- await this.eventDao.appendEvent(event);
-    }
-
-    // Reconstruct the state after appending events
-    const updatedState = await this.getRepresentativeState(id);
-
-    // Update the representative's current state in the database based on the replayed events
-    // This is where we save the materialized state for quicker retrieval
- await this.representativeDao.updateRepresentative(id, updatedState);
-
-    // Return the updated representative state (reconstructed)
-    return updatedState;
-  }
-
-  async deleteRepresentative(id) {
-    if (!id) {
-      throw new Error('Representative ID is required');
-    }
-    // In a financial system, consider a 'RepresentativeDeactivated' event and soft deletion
-    // rather than a hard delete. Hard deletes can lead to loss of historical financial data.
-
-    const eventData = {
- entity_type: 'representative',
-      entity_id: id,
- event_type: 'RepresentativeDeactivated',
-      event_data: { reason: 'Manual Deactivation' }, // Add a reason if available
-      timestamp: new Date(),
-      user_id: // Assuming user_id is available in the context
-    };
-
-    await this.eventDao.appendEvent(eventData);
-
-    // Optionally, mark the representative as inactive in the database for filtering
-    await this.representativeDao.updateRepresentative(id, { is_active: false }); // Requires 'is_active' column in representative table
-
-    // We might not return anything or return a success status for deactivation
-  }
-
-  async getRepresentatives(filters) {
-    // Implement filtering logic in the DAO based on the filters object
-    // For event-sourced entities, filtering by current state requires querying the materialized view (the representatives table)
-    return this.representativeDao.getRepresentatives(filters);
-  }
-
-  async getRepresentativeState(id) {
-    if (!id) {
-      throw new Error('Representative ID is required');
-    }
-
-    // Fetch all events for the representative
-    const events = await this.eventDao.getEventsByEntity('representative', id);
-
-    if (events.length === 0) {
-      // Handle case where no events are found (representative might not exist or is deactivated)
-      return null; // Or throw an error
-    }
-
-    // Replay events to reconstruct the current state
-    let currentState = {}; // Start with an empty state or initial state from the first event
-    for (const event of events) {
-      currentState = this.representativeDao.applyEvent(currentState, event); // Use the applyEvent method in the DAO
-    }
-
-    return currentState; // Return the fully reconstructed state
-  }
-}
-
-export { RepresentativeService };
-
-
-
-      return this.getRepresentative(id); // Return the updated representative
-    } else {
-      // Handle other updates directly (if they don't affect the core state managed by events)
-      return this.representativeDao.updateRepresentative(id, data);
-    }
-  }
-
-  async deleteRepresentative(id) {
-    if (!id) {
-      throw new Error('Representative ID is required');
-    }
-    // Consider soft delete or archiving instead of hard delete in financial systems
-    return this.representativeDao.deleteRepresentative(id);
-  }
-
-  async getRepresentatives(filters) {
-    // Implement filtering logic in the DAO based on the filters object
-    return this.representativeDao.getRepresentatives(filters);
-  }
-
-  async getRepresentativeState(id) {
-    if (!id) {
-      throw new Error('Representative ID is required');
-    }
-
-    const events = await this.eventDao.getEventsByEntity('representative', id);
-
-    let currentState = {
-      id: id,
-      current_balance: 0, // Initial state
-      // ... other relevant state properties
-    };
-
-    // Replay events to reconstruct the current state
-    for (const event of events) {
-      currentState = await this.representativeDao.applyEvent(currentState, event); // representativeDao needs applyEvent logic
+      await this.snapshotDao.saveSnapshot(
+        currentState.id,
+        'representative',
+        currentState.version,
+        stateToSave
+      );
     }
 
     return currentState;
   }
 }
 
-export { RepresentativeService };
+export default RepresentativeService;
