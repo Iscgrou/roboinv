@@ -1,3 +1,6 @@
+-- Add last_reminder_sent_at column to representatives table
+ALTER TABLE representatives
+ADD COLUMN last_reminder_sent_at TIMESTAMP WITH TIME ZONE NULL;
 const schedule = require('node-schedule');
 const NotificationService = require('/app/notification-service/notificationService'); // Absolute path
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
