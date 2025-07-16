@@ -64,7 +64,7 @@ This checklist outlines the remaining actions required to achieve a complete and
 
 - [ ] **Implement Comprehensive Testing (Unit, Integration, E2E)**:
     - **Details:** Write unit tests for all critical business logic, integration tests for service-to-service communication (API Gateway & Message Queue), and end-to-end tests that simulate a full user workflow from voice/text command to database change.
-    - **Status:** In Progress (Unit tests for `salesPartnerDao` and `notificationService` created).
+    - **Status:** In Progress (Unit tests, integration test, and E2E test created).
 
 - [x] **Implement API Gateway Security**:
     - **Details:** Implement a robust authentication and authorization mechanism in the API Gateway, such as JWT (JSON Web Tokens). This will secure all backend service endpoints and ensure only authorized administrators can perform actions.
@@ -73,4 +73,3 @@ This checklist outlines the remaining actions required to achieve a complete and
 - [x] **Implement Production Secrets Management**:
     - **Details:** For production deployment, migrate all sensitive information (database passwords, API keys, tokens) from environment variables to a secure secrets management solution like HashiCorp Vault or a cloud provider's equivalent (AWS Secrets Manager, etc.).
     - **Status:** Completed (Dev Phase - using .env).
-
