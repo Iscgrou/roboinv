@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: financial_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_bus
+    ports:
+      - "5672:5672"   # For AMQP
+      - "15672:15672" # For Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+
+  representative-management-service:
+    build: ./representative-management-service
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./representative-management-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/financial_bot
+      - AMQP_URL=amqp://user:password@rabbitmq:5672
+
+  sales-partner-management-service:
+    build: ./sales-partner-management-service
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./sales-partner-management-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/financial_bot
+      - AMQP_URL=amqp://user:password@rabbitmq:5672
+
+  invoice-generation-service:
+    build: ./invoice-generation-service
+    volumes:
+      - ./invoice-generation-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/financial_bot
+      - AMQP_URL=amqp://user:password@rabbitmq:5672
+
+  payment-processing-service:
+    build: ./payment-processing-service
+    volumes:
+      - ./payment-processing-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+      - rabbitmq
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/financial_bot
+      - AMQP_URL=amqp://user:password@rabbitmq:5672
+
+  reporting-service:
+    build: ./reporting-service
+    volumes:
+      - ./reporting-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/financial_bot
+
+  notification-service:
+    build: ./notification-service
+    volumes:
+      - ./notification-service:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+
+  ai-integration-service:
+    build: ./ai-integration-service
+    volumes:
+      - ./ai-integration-service:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - NLU_PROVIDER_URL=${NLU_PROVIDER_URL}
+      - NLU_API_KEY=${NLU_API_KEY}
+      - STT_API_URL=${STT_API_URL}
+      - STT_API_KEY=${STT_API_KEY}
+
+  reminder-scheduler-service:
+    build: ./reminder-scheduler-service
+    volumes:
+      - ./reminder-scheduler-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - postgres
+      - notification-service
+    environment:
+      - DATABASE_URL=postgres://user:password@postgres:5432/financial_bot
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./api-gateway:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - representative-management-service
+      - sales-partner-management-service
+      - invoice-generation-service
+      - payment-processing-service
+      - reporting-service
+      - ai-integration-service
+
+  telegram-bot-service:
+    build: ./telegram-bot-service
+    volumes:
+      - ./telegram-bot-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - api-gateway
+    environment:
+      - API_GATEWAY_URL=http://api-gateway:9000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+
+volumes:
+  postgres_data:

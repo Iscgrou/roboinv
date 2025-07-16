@@ -29,14 +29,35 @@ class SalesPartnerDao {
 
   // Update an existing sales partner
   async updateSalesPartner(id, data) {
-    const { name, telegram_id, commission_rate } = data;
+    const fields = [];
+    const values = [];
+    let fieldIndex = 1;
+
+    // Dynamically build the SET clause based on provided data
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        fields.push(`${key} = $${fieldIndex}`);
+        values.push(value);
+        fieldIndex++;
+      }
+    }
+
+    if (fields.length === 0) {
+      // If no fields to update, return the current state or throw an error
+      return this.getSalesPartnerById(id);
+    }
+
+    // Always update the updated_at timestamp
+    fields.push(`updated_at = NOW()`);
+
     const query = `
       UPDATE sales_partners
-      SET name = $1, telegram_id = $2, commission_rate = $3, updated_at = NOW()
-      WHERE id = $4
+      SET ${fields.join(', ')}
+      WHERE id = $${fieldIndex}
       RETURNING *;
     `;
-    const values = [name, telegram_id, commission_rate, id];
+    values.push(id);
+
     const result = await this.dbClient.query(query, values);
     return result.rows[0] || null;
   }

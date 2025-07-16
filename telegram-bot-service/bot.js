@@ -26,7 +26,18 @@ bot.on('text', async (msg) => {
  }
 
   // Pass text directly for NLU processing
- await handleNaturalLanguageCommand(chatId, text);
+  try {
+    // Send text to the AI Gateway's NLU endpoint
+    const nluResponse = await axios.post(`${apiGatewayUrl}/ai/nlu`, { text: text }, {
+ headers: {
+ 'Content-Type': 'application/json'
+ }
+    });
+    await handleNaturalLanguageCommand(chatId, nluResponse.data); // Pass the full NLU result object
+  } catch (error) {
+    console.error(`Error sending text for NLU to API Gateway for chat ${chatId}:`, error);
+    await bot.sendMessage(chatId, 'Sorry, I could not process your request due to an internal error.');
+  }
 });
 bot.on('voice', async (msg) => {
   const chatId = msg.chat.id;
@@ -70,7 +81,14 @@ bot.on('voice', async (msg) => {
 
     // Send transcribed text to the AI Gateway's NLU endpoint
     // Pass the transcribed text for NLU processing
-    await handleNaturalLanguageCommand(chatId, transcription);
+    const nluResponse = await axios.post(`${apiGatewayUrl}/ai/nlu`, { text: transcription }, {
+ headers: {
+ 'Content-Type': 'application/json'
+ }
+    });
+
+    // Assuming NLU response structure: { intent: 'record_payment', entities: { representative: 'آقای بهرامی', amount: '1000000' }, confidence: 0.9 }
+    await handleNaturalLanguageCommand(chatId, nluResponse.data); // Pass the full NLU result object
 
   } catch (error) {
     console.error(`Error processing voice message for chat ${chatId}:`, error);
@@ -81,16 +99,6 @@ bot.on('voice', async (msg) => {
 // Function to handle NLU processing and command routing from text or voice
 async function handleNaturalLanguageCommand(chatId, text) {
   try {
-    // Send text to the AI Gateway's NLU endpoint
-    const nluResponse = await axios.post(`${apiGatewayUrl}/ai/nlu`, { text: text }, {
-      headers: {
-        'Content-Type': 'application/json'
-        // Add any necessary authorization headers for the API Gateway here
-        // 'Authorization': 'Bearer your_api_gateway_token'
-      }
-    });
-
-    // Assume NLU response structure: { intent: 'record_payment', entities: { representative: 'آقای بهرامی', amount: '1000000' } }
     // Adjust based on actual NLU response structure
     const nluResult = nluResponse.data;
 

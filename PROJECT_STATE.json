@@ -1,28 +1,77 @@
 {
   "constitution": {
-    "mission_statement": "To provide a seamless and efficient financial management system for proxy panel businesses, their representatives, and sales partners.",
+    "mission_statement": "To build the most intuitive and frictionless real-time collaboration tool for non-technical users.",
     "guiding_principles": [
-      "P1: Accuracy and reliability of financial data are paramount.",
-      "P2: The system must be user-friendly for administrators.",
-      "P3: Automation should minimize manual effort and reduce errors."
+      "P1: User experience is paramount; complexity must be hidden.",
+      "P2: Performance must feel instantaneous, even on low-spec devices.",
+      "P3: The system must be secure by default, not as an afterthought."
     ],
     "anti_patterns_to_avoid": [
-      "AP1: Manual data entry that can be automated.",
-      "AP2: Lack of data consistency or conflicts due to concurrent access.",
-      "AP3: Complex or confusing user interface."
+      "AP1: Adding features that require user configuration.",
+      "AP2: Using heavy frameworks that increase bundle size.",
+      "AP3: Exposing raw engineering concepts (e.g., 'CRDT sync error') to the user."
     ],
-    "vision_vector": ["Efficiency", "Accuracy", "Ease of Use"]
+    "vision_vector": ["Simplicity", "Speed", "Security"]
   },
   "project_name": "Proxy Panel Financial Management Bot",
   "master_blueprint": {
-    "database": "PostgreSQL",
-    "backend": "Node.js with Express.js",
-    "messaging": "RabbitMQ",
-    "gateway": "Lightweight API Gateway",
-    "ai_services": ["Google Cloud Speech-to-Text", "OpenAI Whisper", "NLU Model (Custom or Cloud)"]
+    "database": {
+      "type": "PostgreSQL",
+      "schema": "Detailed schema defined for representatives, sales_partners, invoices, payments, consumption_data, and admin_users.",
+      "event_sourcing": "Implemented for representative and invoice financial operations.",
+      "indexing_strategy": "Defined basic indexing strategy."
+    },
+    "backend": {
+      "database_layer": {
+        "shared_module": "Implemented database connection pool.",
+        "daos": "Implemented basic DAOs with placeholder methods and event sourcing integration.",
+        "event_sourcing_logic": "Implemented basic append and retrieve event methods."
+      },
+      "services": {
+        "representative_management_service": "Core logic implemented with event sourcing.",
+        "sales_partner_management_service": "Core logic implemented.",
+        "invoice_generation_service": "Initial implementation with core workflow and placeholders.",
+        "payment_processing_service": "Core logic implemented with event sourcing.",
+        "reporting_service": "Core logic implemented with report generation methods.",
+        "ai_integration_service": "Initial implementation with core STT and NLU methods.",
+        "notification_service": "Core logic implemented with message sending and reminder generation.",
+        "reminder_scheduler_service": "Core structure with scheduled job implemented."
+      }
+    },
+    "telegram_bot_service": {
+      "natural_language_handling": "Implemented for text and voice.",
+      "intent_entity_processing": "Unified logic implemented.",
+      "task_workflows": "Initiated for key intents.",
+      "clarification_logic": "Basic implementation.",
+      "voice_message_handling": "Implemented.",
+      "ai_integration": "Integrated with AI Integration Service.",
+      "confirmation_flow": "Implemented with inline keyboards and callback handling."
+    },
+    "infrastructure": {
+      "api_gateway": "Basic configuration and routing implemented.",
+      "message_queue": "RabbitMQ setup with shared module for publishing and consuming."
+    },
+    "ai_assistant": {
+      "architecture": "Defined, mapping human tasks to AI capabilities.",
+      "components": [
+        "Enhanced Telegram Bot Service",
+        "Refined AI Integration Service",
+        "Leveraging Backend Services"
+      ],
+      "key_features": [
+        "Voice and Text Natural Language Input",
+        "Intent Recognition",
+        "Entity Extraction and Resolution",
+        "Task Mapping and Routing",
+        "Conversation Management",
+        "Proactive Capabilities (Future)"
+      ]
+    },
+    "ai_integration_service": {
+      "nlu_integration": "Prepared for real NLU provider integration.",
+      "nlu_model": "Requires data gathering, labeling, and training."
+    }
   },
-  "current_phase": 1,
-  "next_objective": "Begin setting up the development environment and initialize the core project structure.",
-  "artifacts": {},
-  "knowledge_base": {}
+  "current_phase": 2,
+  "next_objective": "CRITICAL: Integrate a real, trained NLU model into the AI Integration Service to enable accurate natural language understanding."
 }
