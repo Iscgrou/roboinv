@@ -6,10 +6,12 @@ This checklist outlines the remaining actions required to achieve a complete and
 
 ### Phase 1: AI Core & Intelligence (Highest Priority)
 
-*The AI's "brain." Without this, the assistant cannot understand commands.*
+*The AI's "brain." ]PHV  GVHWithout this, the assistant cannot understand commands.*
 
 - [ ] **NLU Model Training `[MANUAL]`**:
-    - **Details:** Gather a comprehensive dataset of sample Persian phrases for every defined intent (`record_payment`, `check_balance`, etc.). Meticulously label the correct intent and all relevant entities (`representative_name`, `amount`, etc.) for each phrase. Use the chosen NLU provider's platform (e.g., Google Dialogflow, Rasa, wit.ai) to train a custom model with this data. This is a critical manual task.
+    - **Details:** Gather a comprehensive dataset of sample Persian phrases for every defined intent (`record_payment`, `check_balance`, etc.). Meticulously label the correct intent and -
+    
+    all relevant entities (`representative_name`, `amount`, etc.) for each phrase. Use the chosen NLU provider's platform (e.g., Google Dialogflow, Rasa, wit.ai) to train a custom model with this data. This is a critical manual task.
     - **Status:** Not Started.
 
 - [ ] **Real NLU API Integration**:
@@ -64,7 +66,7 @@ This checklist outlines the remaining actions required to achieve a complete and
 
 - [ ] **Implement Comprehensive Testing (Unit, Integration, E2E)**:
     - **Details:** Write unit tests for all critical business logic, integration tests for service-to-service communication (API Gateway & Message Queue), and end-to-end tests that simulate a full user workflow from voice/text command to database change.
-    - **Status:** In Progress (Unit tests, integration test, and E2E test created).
+    - **Status:** In Progress (Unit tests, security integration test, and command-flow integration test created).
 
 - [x] **Implement API Gateway Security**:
     - **Details:** Implement a robust authentication and authorization mechanism in the API Gateway, such as JWT (JSON Web Tokens). This will secure all backend service endpoints and ensure only authorized administrators can perform actions.

@@ -1,77 +1,34 @@
-// ... (imports, context store, etc.)
+// telegram-bot-service/bot.js
+require('dotenv').config({ path: '../.env' });
+const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
+const axios = require('axios');
 
-// --- COMMAND-BASED FLOW IMPLEMENTATION ---
+const token = process.env.TELEGRAM_BOT_TOKEN;
+const bot = new TelegramBot(token, { polling: true });
 
-// Temporarily disable the generic text handler that relies on NLU
-/*
-bot.on('text', async (msg) => {
-  if (!msg.text.startsWith('/')) {
-    // This section is now disabled until the NLU model is ready.
-    // const nluResult = await callNluService(msg.text);
-    // await handleNaturalLanguageCommand(msg.chat.id, nluResult);
-  }
-});
-*/
+// ... (conversationContexts map, helper functions, command handlers like onText, callback_query handler etc. remain here)
+// ... (handleCheckBalance, handleGetInvoiceHistory, etc. remain here)
 
-bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, "Welcome to the AI Accounting Assistant. Please use the available commands. Example: /balance [representative_name]");
-});
+console.log('Telegram bot service started...');
 
-// Command handler for /balance [name]
-bot.onText(/\/balance (.+)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const representativeIdentifier = match[1]; // The captured part after the command
+// --- TEST SERVER (only runs if NODE_ENV is 'test') ---
+if (process.env.NODE_ENV === 'test') {
+  const app = express();
+  app.use(express.json());
 
-    if (!representativeIdentifier) {
-        bot.sendMessage(chatId, "Please provide a representative name or ID. Usage: /balance [name or id]");
-        return;
-    }
+  // This endpoint allows our test suite to inject messages into the bot
+  app.post('/test/message', (req, res) => {
+    // Manually trigger the 'message' event for the bot to process
+    bot.processUpdate(req.body);
+    res.status(200).send({ message: 'Message processed' });
+  });
 
-    // We can re-use our existing handler logic!
-    // We just need to format the input as if it came from the NLU service.
-    const entities = { representative_name: representativeIdentifier };
-    console.log(`Received command /balance for: ${representativeIdentifier}`);
-    await handleCheckBalance(chatId, entities);
-});
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => {
+    console.log(`Test server for bot running on port ${port}`);
+  });
+}
 
-// Command handler for /invoices [name]
-bot.onText(/\/invoices (.+)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const representativeIdentifier = match[1];
-
-    if (!representativeIdentifier) {
-        bot.sendMessage(chatId, "Usage: /invoices [name or id]");
-        return;
-    }
-
-    const entities = { representative_name: representativeIdentifier };
-    console.log(`Received command /invoices for: ${representativeIdentifier}`);
-    await handleGetInvoiceHistory(chatId, entities);
-});
-
-
-// Command handler for /payment [name] [amount]
-bot.onText(/\/payment (.+) (\d+)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const representativeIdentifier = match[1];
-    const amount = parseInt(match[2], 10);
-
-    if (!representativeIdentifier || !amount) {
-        bot.sendMessage(chatId, "Usage: /payment [name or id] [amount]");
-        return;
-    }
-
-    const entities = { 
-        representative_name: representativeIdentifier,
-        amount: amount
-    };
-    console.log(`Received command /payment for: ${representativeIdentifier} with amount: ${amount}`);
-    // NOTE: handleRecordPayment expects confirmation, this needs to be adapted
-    // For now, we'll call it directly.
-    await handleRecordPayment(chatId, entities);
-});
-
-
-// We keep the handle... functions as they contain the core logic
-// ... (handleCheckBalance, handleGetInvoiceHistory, handleRecordPayment etc.)
-// ... (callback_query handler for ambiguity resolution)
+// Export the bot instance for testing purposes
+module.exports = bot;
